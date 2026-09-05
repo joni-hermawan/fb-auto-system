@@ -1,0 +1,50 @@
+name: Post Kisah Nabi Harian
+
+on:
+  schedule:
+    # Jalan tiap hari jam 19:00 WIB (12:00 UTC). Sesuaikan kalau timezone beda.
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}  # supaya bisa dijalankan manual dari tab Actions di GitHub
+
+jobs:
+  post-video:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependency Python
+        run: pip install -r requirements.txt
+
+      - name: Cache background video & state series (biar tidak download ulang tiap run)
+        uses: actions/cache@v4
+        with:
+          path: |
+            output/series_state.json
+            assets/backgrounds
+          key: series-assets-${{ github.run_id }}
+          restore-keys: series-assets-
+
+      - name: Jalankan sistem (generate + upload otomatis)
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          VIDEO_LANG: id
+        run: python main.py --confirm-upload
+
+      - name: Commit state & background terbaru ke repo (biar tersimpan permanen)
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add output/series_state.json assets/backgrounds
+          git commit -m "Update episode state & background cache" || echo "Tidak ada perubahan"
+          git push
